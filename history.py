@@ -3,12 +3,10 @@ import random
 import re
 
 # ==========================================
-# 0. ページ設定（※必ず一番最初に書く必要があります）
+# 0. ページ設定とCSS
 # ==========================================
-# 画面を横広く(wide)使い、余白を減らす
 st.set_page_config(layout="wide", page_title="社会科 課題一括割り当て")
 
-# 画面全体の文字を小さくし、隙間を詰めるCSS（デザイン設定）
 st.markdown("""
     <style>
     /* 全体の上下の余白を最小化 */
@@ -16,29 +14,19 @@ st.markdown("""
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
     }
-    /* 全体の文字サイズと行間を小さく */
+    /* 全体の文字サイズを小さく */
     p, span, div, label {
         font-size: 13px !important;
-        line-height: 1.2 !important;
     }
-    /* 各行（カラム）の隙間を詰める */
+    /* 行間を詰める */
     [data-testid="stVerticalBlock"] {
-        gap: 0.2rem !important;
+        gap: 0rem !important;
     }
-    /* 曜日のセレクトボックス(プルダウン)の高さを極限まで小さく */
+    /* 曜日のセレクトボックスを極限まで小さく */
     [data-baseweb="select"] > div {
-        min-height: 24px !important;
+        min-height: 28px !important;
         padding-top: 0px !important;
         padding-bottom: 0px !important;
-    }
-    /* 見出しサイズ調整 */
-    h1 { font-size: 20px !important; margin-bottom: 0 !important; }
-    h2 { font-size: 18px !important; margin-bottom: 0 !important; }
-    h3 { font-size: 16px !important; margin-bottom: 0 !important; }
-    /* 区切り線を細くして上下の隙間を減らす */
-    hr {
-        margin: 0.5em 0 !important;
-        border-color: #ddd !important;
     }
     /* フォームの余白縮小 */
     [data-testid="stForm"] {
@@ -591,13 +579,15 @@ RAW_DATA = """
 """
 
 # ==========================================
-# 3. テキストデータを解析してリスト化する関数
+# 3. テキストデータを解析して辞書化する関数
 # ==========================================
 @st.cache_data
 def parse_topics(raw_text):
     topics = []
     current_subject = ""
-    current_category = ""
+    current_hen = ""
+    current_sho = ""
+    current_setsu = ""
     category_item_count = 0 
     
     for line in raw_text.split('\n'):
@@ -607,26 +597,58 @@ def parse_topics(raw_text):
             
         if line.startswith('## '):
             current_subject = line.replace('## ', '').strip()
-            current_category = ""
+            current_hen = ""
+            current_sho = ""
+            current_setsu = ""
             category_item_count = 0
             
-        elif line.startswith('* **') and line.endswith('**'):
-            current_category = line.replace('* **', '').replace('**', '').strip()
+        elif line.startswith('* **'):
+            cat = line.replace('* **', '').replace('**', '').strip()
+            if '編' in cat:
+                current_hen = cat
+                current_sho = ""
+                current_setsu = ""
+            elif '章' in cat:
+                current_sho = cat
+                current_setsu = ""
+            else:
+                current_setsu = cat
             category_item_count = 0 
             
         elif '(p.' in line:
             item = re.sub(r'^[\*\s■]+', '', line).strip()
             is_first = (category_item_count == 0)
             
-            if current_category:
-                topic_str = f"【{current_subject}】 {current_category}： {item}"
-            else:
-                topic_str = f"【{current_subject}】 {item}"
+            # (p.X-Y) などを抽出して pX〜pY に整形
+            page_match = re.search(r'\((p\.[^\)]+)\)', item)
+            page_raw = page_match.group(1) if page_match else ""
+            page_fmt = page_raw
+            if page_raw:
+                s = page_raw.replace('p.', '')
+                parts = re.split(r'[-~〜]', s)
+                if len(parts) == 2:
+                    page_fmt = f"p{parts[0]}〜p{parts[1]}"
+                elif len(parts) == 1:
+                    page_fmt = f"p{parts[0]}"
+            
+            # ページ部分を消してタイトルのみにする
+            title_str = re.sub(r'\((p\.[^\)]+)\)', '', item).strip()
+            
+            # 編、章、節、題を繋げる
+            parts = []
+            if current_hen: parts.append(current_hen)
+            if current_sho: parts.append(current_sho)
+            if current_setsu: parts.append(current_setsu)
+            parts.append(title_str)
+            full_title = "、".join(parts)
             
             topics.append({
                 "subject": current_subject,
-                "text": topic_str,
-                "is_first": is_first 
+                "full_title": full_title,
+                "page_fmt": page_fmt,
+                "is_first": is_first,
+                # セレクトボックスで表示するためのテキスト
+                "display_text": f"【{current_subject}】 {full_title} ({page_fmt})"
             })
             
             category_item_count += 1
@@ -647,10 +669,9 @@ st.title("社会科 課題一括割り当てツール")
 st.markdown("### 抽出条件の設定")
 target_subject = st.radio(
     "科目を選択:",
-    ("すべての科目", "歴史", "地理", "公民"),  # 名前を少し短縮
+    ("すべての科目", "歴史", "地理", "公民"), 
     horizontal=True
 )
-# "歴史"が選ばれたら"歴史的分野"に置き換える処理
 subject_map = {"歴史": "歴史的分野", "地理": "地理的分野", "公民": "公民的分野", "すべての科目": "すべての科目"}
 target_subject_full = subject_map[target_subject]
 
@@ -662,7 +683,7 @@ for t in all_topics:
         continue
     if only_first and not t["is_first"]:
         continue
-    filtered_topics.append(t["text"])
+    filtered_topics.append(t)
 
 st.divider()
 
@@ -689,8 +710,7 @@ with tab1:
                     assigned_topic = random.choice(filtered_topics)
                     st.session_state['registered_data'].insert(0, {
                         "名前": member,
-                        "割り当てられたテーマ": assigned_topic,
-                        "割り当て方法": "ランダム",
+                        "topic_data": assigned_topic,
                         "曜日": "-"
                     })
                 st.rerun() 
@@ -700,7 +720,13 @@ with tab2:
     with st.form("manual_form", clear_on_submit=True):
         selected_members_man = st.multiselect("メンバーを選択:", options=MEMBER_LIST)
         other_members_man = st.text_input("追加メンバー(カンマ区切り)", key="man_other")
-        selected_topic = st.selectbox("課題を選択:", filtered_topics if filtered_topics else ["課題がありません"])
+        
+        # 辞書の中の「display_text」を表示用にする
+        selected_topic = st.selectbox(
+            "課題を選択:", 
+            filtered_topics if filtered_topics else [{"display_text": "課題がありません"}],
+            format_func=lambda x: x["display_text"]
+        )
         submit_manual = st.form_submit_button("一気に個別に割り当て")
 
         if submit_manual:
@@ -716,44 +742,42 @@ with tab2:
                 for member in final_members:
                     st.session_state['registered_data'].insert(0, {
                         "名前": member,
-                        "割り当てられたテーマ": selected_topic,
-                        "割り当て方法": "手動選択",
+                        "topic_data": selected_topic,
                         "曜日": "-"
                     })
                 st.rerun() 
 
-# ==========================================
-# 5. 登録一覧の表示 (超コンパクトレイアウト)
-# ==========================================
-st.header(f"登録一覧 ({len(st.session_state['registered_data'])}件)")
 
+# ==========================================
+# 5. 登録一覧の表示 (カスタムレイアウト)
+# ==========================================
 if st.session_state['registered_data']:
-    # 見出し行 (幅の比率: 名前 1.5, テーマ 6.5, 方法 1.5, 曜日 1)
-    col_h1, col_h2, col_h3, col_h4 = st.columns([1.5, 6.5, 1.5, 1])
-    col_h1.write("**名前**")
-    col_h2.write("**割り当てられたテーマ**")
-    col_h3.write("**方法**")
-    col_h4.write("**曜日**")
-    st.divider()
-
+    st.markdown(f"### 登録一覧 ({len(st.session_state['registered_data'])}件)")
+    st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
+    
     day_options = ["-", "月", "火", "水", "木", "金", "土", "日"]
     
     for i, data in enumerate(st.session_state['registered_data']):
-        # 幅の比率は見出しと同じにする
-        col1, col2, col3, col4 = st.columns([1.5, 6.5, 1.5, 1])
+        topic = data["topic_data"]
         
-        col1.write(data["名前"])
-        col2.write(data["割り当てられたテーマ"])
-        col3.write(data["割り当て方法"])
+        # 1行目: 〇〇(名前) 【△△的分野】p✦✦〜p☆☆
+        st.markdown(f"<div style='font-weight:bold; font-size:14px; margin-bottom:4px;'>"
+                    f"{data['名前']} 【{topic['subject']}】{topic['page_fmt']}</div>", 
+                    unsafe_allow_html=True)
+        
+        # 2行目: 章名、節名、題など ［セレクトボックス］
+        col1, col2 = st.columns([8.5, 1.5])
+        col1.markdown(f"<div style='color:#444; padding-top:4px;'>{topic['full_title']}</div>", unsafe_allow_html=True)
         
         current_day = data.get("曜日", "-")
         day_idx = day_options.index(current_day) if current_day in day_options else 0
-        new_day = col4.selectbox("曜日", day_options, index=day_idx, key=f"day_{i}", label_visibility="collapsed")
+        new_day = col2.selectbox("曜日", day_options, index=day_idx, key=f"day_{i}", label_visibility="collapsed")
         
         if new_day != current_day:
             st.session_state['registered_data'][i]["曜日"] = new_day
 
-    st.divider()
+        st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
+
     if st.button("すべての登録データを消去する"):
         st.session_state['registered_data'] = []
         st.rerun()

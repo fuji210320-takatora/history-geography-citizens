@@ -3,6 +3,22 @@ import random
 import re
 
 # ==========================================
+# 0. 事前メンバーリストの設定
+# ==========================================
+# ここに割り当て対象となるメンバーの名前をあらかじめ書いておきます。
+# 【書き方】
+# "名前", のように、ダブルクォーテーション（"）で囲み、末尾にカンマ（,）をつけます。
+MEMBER_LIST = [
+    "山田 太郎",
+    "佐藤 花子",
+    "鈴木 一郎",
+    "田中 次郎",
+    "高橋 三郎",
+    # ↓ この下に同じ形式で追加していってください
+    
+]
+
+# ==========================================
 # 1. データの準備
 # ==========================================
 RAW_DATA = """
@@ -517,7 +533,7 @@ RAW_DATA = """
 * 3 地球環境問題 (p.198~199)
 * 4 気候変動と資源・エネルギー問題 (p.200~201)
 * 【もっと知りたい!】これからの日本のエネルギーを考える (p.202~203)
-* 5 平和な世界に向けて (p.204~205)
+* 5 平平和な世界に向けて (p.204~205)
 
 * **3節 これからの地球社会と日本**
 * 1 世界と協力する日本 (p.206~207)
@@ -539,29 +555,24 @@ def parse_topics(raw_text):
     topics = []
     current_subject = ""
     current_category = ""
-    category_item_count = 0  # 各「章」や「節」ごとの項目数をカウントする変数
+    category_item_count = 0 
     
     for line in raw_text.split('\n'):
         line = line.strip()
         if not line:
             continue
             
-        # 科目の切り替わり
         if line.startswith('## '):
             current_subject = line.replace('## ', '').strip()
             current_category = ""
             category_item_count = 0
             
-        # 章・節の切り替わり (例: * **第1章...** や * **1節...**)
         elif line.startswith('* **') and line.endswith('**'):
             current_category = line.replace('* **', '').replace('**', '').strip()
-            category_item_count = 0  # 新しい章・節に入ったらカウントを0にリセット
+            category_item_count = 0 
             
-        # 実際の課題（p.が含まれる行）
         elif '(p.' in line:
             item = re.sub(r'^[\*\s■]+', '', line).strip()
-            
-            # その「章」や「節」の中でカウントが0のものが「最初の課題（単元の初め）」
             is_first = (category_item_count == 0)
             
             if current_category:
@@ -572,10 +583,9 @@ def parse_topics(raw_text):
             topics.append({
                 "subject": current_subject,
                 "text": topic_str,
-                "is_first": is_first  # 最初の項目かどうかのフラグを持たせる
+                "is_first": is_first 
             })
             
-            # カウントを増やす（以降の項目はis_first=Falseになる）
             category_item_count += 1
             
     return topics
@@ -589,7 +599,7 @@ all_topics = parse_topics(RAW_DATA)
 if 'registered_data' not in st.session_state:
     st.session_state['registered_data'] = []
 
-st.title("社会科 課題割り当てツール")
+st.title("社会科 課題一括割り当てツール")
 
 st.markdown("### 抽出条件の設定")
 # 科目の絞り込み
@@ -605,13 +615,10 @@ only_first = st.checkbox("単元の初め（各節や章の最初の項目）の
 # 選択された条件に基づいてリストをフィルタリング
 filtered_topics = []
 for t in all_topics:
-    # 科目フィルター
     if target_subject != "すべての科目" and t["subject"] != target_subject:
         continue
-    # 単元始めフィルター
     if only_first and not t["is_first"]:
         continue
-    
     filtered_topics.append(t["text"])
 
 st.divider()
@@ -622,45 +629,75 @@ tab1, tab2 = st.tabs(["🎲 ランダム割り当て", "✍️ 個別（手動�
 # ---- ランダム割り当てタブ ----
 with tab1:
     with st.form("random_form", clear_on_submit=True):
-        st.write("設定した条件の中からランダムに課題を割り当てます。")
-        name_random = st.text_input("名前を入力してください (例: 山田太郎)", key="random_name")
-        submit_random = st.form_submit_button("ランダムに割り当てる")
+        st.write("設定した条件の中から、選択したメンバー全員に一気にランダムで課題を割り当てます。")
+        
+        # マルチセレクトでメンバーを複数選択（チェックボックスのように使えます）
+        selected_members_rand = st.multiselect(
+            "割り当てるメンバーを選択してください:", 
+            options=MEMBER_LIST
+        )
+        
+        # リストにない人を臨時で追加したい場合の枠
+        other_members_rand = st.text_input("リストにない人を追加する場合 (カンマ区切りで複数可)")
+        
+        submit_random = st.form_submit_button("一気にランダム割り当て")
 
-        if submit_random and name_random:
-            if filtered_topics:
-                assigned_topic = random.choice(filtered_topics)
-                st.session_state['registered_data'].insert(0, {
-                    "名前": name_random,
-                    "割り当てられたテーマ": assigned_topic,
-                    "割り当て方法": "ランダム"
-                })
-                st.rerun() 
-            else:
+        if submit_random:
+            # 選択された人と追加された人を合体させる
+            final_members = selected_members_rand.copy()
+            if other_members_rand:
+                final_members.extend([m.strip() for m in other_members_rand.split(",") if m.strip()])
+                
+            if not final_members:
+                st.error("メンバーが選択（または入力）されていません。")
+            elif not filtered_topics:
                 st.error("条件に合う課題が見つかりません。抽出条件を変更してください。")
+            else:
+                # 選択されたメンバー全員に対して順番にランダム割り当て
+                for member in final_members:
+                    assigned_topic = random.choice(filtered_topics)
+                    st.session_state['registered_data'].insert(0, {
+                        "名前": member,
+                        "割り当てられたテーマ": assigned_topic,
+                        "割り当て方法": "ランダム"
+                    })
+                st.rerun() 
 
 # ---- 個別（手動）割り当てタブ ----
 with tab2:
     with st.form("manual_form", clear_on_submit=True):
-        st.write("設定した条件の一覧から、特定の課題を選んで割り当てます。")
-        name_manual = st.text_input("名前を入力してください (例: 佐藤花子)", key="manual_name")
+        st.write("設定した条件の一覧から特定の課題を選び、選択したメンバー全員に同じ課題を一気に割り当てます。")
         
-        # フィルタリングされたリストをセレクトボックスに表示
+        selected_members_man = st.multiselect(
+            "割り当てるメンバーを選択してください:", 
+            options=MEMBER_LIST
+        )
+        other_members_man = st.text_input("リストにない人を追加する場合 (カンマ区切りで複数可)", key="man_other")
+        
         selected_topic = st.selectbox(
             "割り当てる課題を選択してください:", 
             filtered_topics if filtered_topics else ["条件に合う課題がありません"]
         )
-        submit_manual = st.form_submit_button("個別に割り当てる")
+        submit_manual = st.form_submit_button("一気に個別に割り当て")
 
-        if submit_manual and name_manual:
-            if filtered_topics:
-                st.session_state['registered_data'].insert(0, {
-                    "名前": name_manual,
-                    "割り当てられたテーマ": selected_topic,
-                    "割り当て方法": "手動選択"
-                })
-                st.rerun() 
-            else:
+        if submit_manual:
+            final_members = selected_members_man.copy()
+            if other_members_man:
+                final_members.extend([m.strip() for m in other_members_man.split(",") if m.strip()])
+                
+            if not final_members:
+                st.error("メンバーが選択（または入力）されていません。")
+            elif not filtered_topics:
                 st.error("課題が選択されていません。")
+            else:
+                # 選択されたメンバー全員に同じ課題を割り当て
+                for member in final_members:
+                    st.session_state['registered_data'].insert(0, {
+                        "名前": member,
+                        "割り当てられたテーマ": selected_topic,
+                        "割り当て方法": "手動選択"
+                    })
+                st.rerun() 
 
 # ==========================================
 # 4. 登録一覧の表示

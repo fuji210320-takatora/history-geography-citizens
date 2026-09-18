@@ -599,17 +599,14 @@ if 'registered_data' not in st.session_state:
 st.title("社会科 課題一括割り当てツール")
 
 st.markdown("### 抽出条件の設定")
-# 科目の絞り込み
 target_subject = st.radio(
     "科目を選択:",
     ("すべての科目", "歴史的分野", "地理的分野", "公民的分野"),
     horizontal=True
 )
 
-# 単元始めの絞り込み
 only_first = st.checkbox("単元の初め（各節や章の最初の項目）のみを対象にする")
 
-# 選択された条件に基づいてリストをフィルタリング
 filtered_topics = []
 for t in all_topics:
     if target_subject != "すべての科目" and t["subject"] != target_subject:
@@ -620,21 +617,14 @@ for t in all_topics:
 
 st.divider()
 
-# タブで「ランダム」と「個別（手動）」を分ける
 tab1, tab2 = st.tabs(["🎲 ランダム割り当て", "✍️ 個別（手動）割り当て"])
 
 # ---- ランダム割り当てタブ ----
 with tab1:
     with st.form("random_form", clear_on_submit=True):
         st.write("設定した条件の中から、選択したメンバー全員に一気にランダムで課題を割り当てます。")
-        
-        selected_members_rand = st.multiselect(
-            "割り当てるメンバーを選択してください:", 
-            options=MEMBER_LIST
-        )
-        
+        selected_members_rand = st.multiselect("割り当てるメンバーを選択してください:", options=MEMBER_LIST)
         other_members_rand = st.text_input("リストにない人を追加する場合 (カンマ区切りで複数可)")
-        
         submit_random = st.form_submit_button("一気にランダム割り当て")
 
         if submit_random:
@@ -649,7 +639,6 @@ with tab1:
             else:
                 for member in final_members:
                     assigned_topic = random.choice(filtered_topics)
-                    # 初期値として 曜日: "-" を持たせる
                     st.session_state['registered_data'].insert(0, {
                         "名前": member,
                         "割り当てられたテーマ": assigned_topic,
@@ -662,17 +651,9 @@ with tab1:
 with tab2:
     with st.form("manual_form", clear_on_submit=True):
         st.write("設定した条件の一覧から特定の課題を選び、選択したメンバー全員に同じ課題を一気に割り当てます。")
-        
-        selected_members_man = st.multiselect(
-            "割り当てるメンバーを選択してください:", 
-            options=MEMBER_LIST
-        )
+        selected_members_man = st.multiselect("割り当てるメンバーを選択してください:", options=MEMBER_LIST)
         other_members_man = st.text_input("リストにない人を追加する場合 (カンマ区切りで複数可)", key="man_other")
-        
-        selected_topic = st.selectbox(
-            "割り当てる課題を選択してください:", 
-            filtered_topics if filtered_topics else ["条件に合う課題がありません"]
-        )
+        selected_topic = st.selectbox("割り当てる課題を選択:", filtered_topics if filtered_topics else ["条件に合う課題がありません"])
         submit_manual = st.form_submit_button("一気に個別に割り当て")
 
         if submit_manual:
@@ -686,7 +667,6 @@ with tab2:
                 st.error("課題が選択されていません。")
             else:
                 for member in final_members:
-                    # 初期値として 曜日: "-" を持たせる
                     st.session_state['registered_data'].insert(0, {
                         "名前": member,
                         "割り当てられたテーマ": selected_topic,
@@ -696,28 +676,40 @@ with tab2:
                 st.rerun() 
 
 # ==========================================
-# 4. 登録一覧の表示 (編集可能なテーブル)
+# 4. 登録一覧の表示 (折り返し＋ワンクリック選択)
 # ==========================================
 st.header(f"登録一覧 ({len(st.session_state['registered_data'])}件)")
 
 if st.session_state['registered_data']:
-    # st.table ではなく st.data_editor を使って表を表示＆編集可能にする
-    st.session_state['registered_data'] = st.data_editor(
-        st.session_state['registered_data'],
-        column_config={
-            "曜日": st.column_config.SelectboxColumn(
-                "曜日",
-                help="発表や提出の曜日を選択してください",
-                width="small",
-                options=["-", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"],
-                required=True
-            )
-        },
-        hide_index=True,  # 左端の連番（0, 1, 2...）を隠す
-        use_container_width=True # 画面幅に合わせて表示
-    )
+    # 見出し行を作成
+    col_h1, col_h2, col_h3, col_h4 = st.columns([2, 5, 2, 2])
+    col_h1.write("**名前**")
+    col_h2.write("**割り当てられたテーマ**")
+    col_h3.write("**割り当て方法**")
+    col_h4.write("**曜日**")
+    st.divider()
+
+    # 各行のデータを表示
+    day_options = ["-", "月", "火", "水", "木", "金", "土", "日"]
     
-    # リストをリセットするボタン
+    for i, data in enumerate(st.session_state['registered_data']):
+        col1, col2, col3, col4 = st.columns([2, 5, 2, 2])
+        
+        col1.write(data["名前"])
+        # テーマは文字数が多いのでそのまま表示することで自然に折り返されます
+        col2.write(data["割り当てられたテーマ"])
+        col3.write(data["割り当て方法"])
+        
+        # 曜日選択（1クリックで開く標準のセレクトボックス）
+        current_day = data.get("曜日", "-")
+        day_idx = day_options.index(current_day) if current_day in day_options else 0
+        new_day = col4.selectbox("曜日", day_options, index=day_idx, key=f"day_{i}", label_visibility="collapsed")
+        
+        # 変更があれば保存
+        if new_day != current_day:
+            st.session_state['registered_data'][i]["曜日"] = new_day
+
+    st.divider()
     if st.button("すべての登録データを消去する"):
         st.session_state['registered_data'] = []
         st.rerun()

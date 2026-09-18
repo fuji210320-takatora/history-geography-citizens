@@ -16,18 +16,14 @@ st.markdown("""
     }
     /* 全体の文字サイズを小さく */
     p, span, div, label {
-        font-size: 13px !important;
+        font-size: 14px !important;
     }
-    /* 行間を限界まで詰める */
-    [data-testid="stVerticalBlock"] {
-        gap: 0rem !important;
-    }
-    /* 曜日のセレクトボックスの幅・高さをさらに極小化 */
+    /* 曜日のセレクトボックスの幅・高さを極小化 */
     div[data-testid="stSelectbox"] {
-        width: 60px !important; /* 横幅を小さく */
+        width: 60px !important; 
     }
     [data-baseweb="select"] > div {
-        min-height: 22px !important;
+        min-height: 24px !important;
         font-size: 12px !important;
         padding-top: 0px !important;
         padding-bottom: 0px !important;
@@ -44,11 +40,11 @@ st.markdown("""
 # 1. 事前メンバーリストの設定
 # ==========================================
 MEMBER_LIST = [
-    "藤井 敬久",
-    "大山 岳久",
-    "尾崎 蒼太",
-    "生永 匠",
-    "姫野 翔",
+    "山田 太郎",
+    "佐藤 花子",
+    "鈴木 一郎",
+    "田中 次郎",
+    "高橋 三郎",
     # ↓ この下に同じ形式で追加していってください
     
 ]
@@ -623,7 +619,6 @@ def parse_topics(raw_text):
             item = re.sub(r'^[\*\s■]+', '', line).strip()
             is_first = (category_item_count == 0)
             
-            # (p.X-Y) などを抽出して pX〜pY に整形
             page_match = re.search(r'\((p\.[^\)]+)\)', item)
             page_raw = page_match.group(1) if page_match else ""
             page_fmt = page_raw
@@ -635,10 +630,8 @@ def parse_topics(raw_text):
                 elif len(parts) == 1:
                     page_fmt = f"p{parts[0]}"
             
-            # ページ部分を消してタイトルのみにする
             title_str = re.sub(r'\((p\.[^\)]+)\)', '', item).strip()
             
-            # 編、章、節、題を繋げる
             parts = []
             if current_hen: parts.append(current_hen)
             if current_sho: parts.append(current_sho)
@@ -692,7 +685,6 @@ st.divider()
 
 tab1, tab2 = st.tabs(["🎲 ランダム", "✍️ 個別(手動)"])
 
-# ---- ランダム割り当てタブ ----
 with tab1:
     with st.form("random_form", clear_on_submit=True):
         selected_members_rand = st.multiselect("メンバーを選択:", options=MEMBER_LIST)
@@ -718,7 +710,6 @@ with tab1:
                     })
                 st.rerun() 
 
-# ---- 個別（手動）割り当てタブ ----
 with tab2:
     with st.form("manual_form", clear_on_submit=True):
         selected_members_man = st.multiselect("メンバーを選択:", options=MEMBER_LIST)
@@ -751,7 +742,7 @@ with tab2:
 
 
 # ==========================================
-# 5. 登録一覧の表示 (超コンパクトレイアウト)
+# 5. 登録一覧の表示
 # ==========================================
 if st.session_state['registered_data']:
     st.markdown(f"### 登録一覧 ({len(st.session_state['registered_data'])}件)")
@@ -761,15 +752,14 @@ if st.session_state['registered_data']:
     for i, data in enumerate(st.session_state['registered_data']):
         topic = data["topic_data"]
         
-        # 1行目: 〇〇(名前) 【△△的分野】p✦✦〜p☆☆ (下の行との隙間を小さくするため margin-bottom を 0 に)
-        st.markdown(f"<div style='font-weight:bold; font-size:14px; margin-top:14px; margin-bottom:0px;'>"
-                    f"{data['名前']} 【{topic['subject']}】{topic['page_fmt']}</div>", 
-                    unsafe_allow_html=True)
+        # 1行目: 〇〇(名前) 【△△的分野】p✦✦〜p☆☆ 
+        # (無理なスタイル調整を外し、普通の改行にしました)
+        st.write(f"**{data['名前']}** 【{topic['subject']}】{topic['page_fmt']}")
         
-        # 2行目: 章名、節名、題など と [セレクトボックス] を同じ行に並べる
+        # 2行目: 章名、節名、題など と [セレクトボックス]
         col1, col2 = st.columns([9.2, 0.8])
         with col1:
-            st.markdown(f"<div style='color:#444; margin-top:2px;'>{topic['full_title']}</div>", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:#444;'>{topic['full_title']}</span>", unsafe_allow_html=True)
         with col2:
             current_day = data.get("曜日", "-")
             day_idx = day_options.index(current_day) if current_day in day_options else 0
@@ -778,7 +768,9 @@ if st.session_state['registered_data']:
             if new_day != current_day:
                 st.session_state['registered_data'][i]["曜日"] = new_day
 
-    st.divider()
+        # 人と人の間に線は引かず、少し空白行を設けて区切る
+        st.markdown("<br>", unsafe_allow_html=True)
+
     if st.button("すべての登録データを消去する"):
         st.session_state['registered_data'] = []
         st.rerun()

@@ -539,19 +539,31 @@ def parse_topics(raw_text):
     topics = []
     current_subject = ""
     current_category = ""
+    category_item_count = 0  # 各「章」や「節」ごとの項目数をカウントする変数
     
     for line in raw_text.split('\n'):
         line = line.strip()
         if not line:
             continue
             
+        # 科目の切り替わり
         if line.startswith('## '):
             current_subject = line.replace('## ', '').strip()
             current_category = ""
+            category_item_count = 0
+            
+        # 章・節の切り替わり (例: * **第1章...** や * **1節...**)
         elif line.startswith('* **') and line.endswith('**'):
             current_category = line.replace('* **', '').replace('**', '').strip()
+            category_item_count = 0  # 新しい章・節に入ったらカウントを0にリセット
+            
+        # 実際の課題（p.が含まれる行）
         elif '(p.' in line:
             item = re.sub(r'^[\*\s■]+', '', line).strip()
+            
+            # その「章」や「節」の中でカウントが0のものが「最初の課題（単元の初め）」
+            is_first = (category_item_count == 0)
+            
             if current_category:
                 topic_str = f"【{current_subject}】 {current_category}： {item}"
             else:
@@ -559,8 +571,12 @@ def parse_topics(raw_text):
             
             topics.append({
                 "subject": current_subject,
-                "text": topic_str
+                "text": topic_str,
+                "is_first": is_first  # 最初の項目かどうかのフラグを持たせる
             })
+            
+            # カウントを増やす（以降の項目はis_first=Falseになる）
+            category_item_count += 1
             
     return topics
 
@@ -584,7 +600,7 @@ target_subject = st.radio(
 )
 
 # 単元始めの絞り込み
-only_intro = st.checkbox("単元始め（「導入の活動」や「初めに」など）のみを対象にする")
+only_first = st.checkbox("単元の初め（各節や章の最初の項目）のみを対象にする")
 
 # 選択された条件に基づいてリストをフィルタリング
 filtered_topics = []
@@ -593,7 +609,7 @@ for t in all_topics:
     if target_subject != "すべての科目" and t["subject"] != target_subject:
         continue
     # 単元始めフィルター
-    if only_intro and not any(kw in t["text"] for kw in ["導入の活動", "初めに"]):
+    if only_first and not t["is_first"]:
         continue
     
     filtered_topics.append(t["text"])
@@ -618,7 +634,7 @@ with tab1:
                     "割り当てられたテーマ": assigned_topic,
                     "割り当て方法": "ランダム"
                 })
-                st.rerun() # 画面を即時更新
+                st.rerun() 
             else:
                 st.error("条件に合う課題が見つかりません。抽出条件を変更してください。")
 
@@ -642,7 +658,7 @@ with tab2:
                     "割り当てられたテーマ": selected_topic,
                     "割り当て方法": "手動選択"
                 })
-                st.rerun() # 画面を即時更新
+                st.rerun() 
             else:
                 st.error("課題が選択されていません。")
 

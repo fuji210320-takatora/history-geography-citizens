@@ -3,7 +3,7 @@ import random
 import re
 
 # ==========================================
-# 1. データの準備（提供いただいたテキストデータをそのまま読み込み）
+# 1. データの準備
 # ==========================================
 RAW_DATA = """
 ## 歴史的分野
@@ -545,16 +545,13 @@ def parse_topics(raw_text):
         if not line:
             continue
             
-        # 科目の抽出 (## 歴史的分野 など)
         if line.startswith('## '):
             current_subject = line.replace('## ', '').strip()
             current_category = ""
-        # 章・節の抽出 (* **第1章...** など)
         elif line.startswith('* **') and line.endswith('**'):
             current_category = line.replace('* **', '').replace('**', '').strip()
-        # 実際のトピック行 (p. が含まれる行)
         elif '(p.' in line:
-            item = re.sub(r'^[\*\s■]+', '', line).strip() # 先頭の記号を削除
+            item = re.sub(r'^[\*\s■]+', '', line).strip()
             if current_category:
                 topic_str = f"【{current_subject}】 {current_category}： {item}"
             else:
@@ -567,54 +564,99 @@ def parse_topics(raw_text):
             
     return topics
 
-# 全データを解析して読み込み
 all_topics = parse_topics(RAW_DATA)
 
 # ==========================================
 # 3. StreamlitアプリのUI構築
 # ==========================================
 
-# 登録データを保持するための設定
 if 'registered_data' not in st.session_state:
     st.session_state['registered_data'] = []
 
-st.title("社会科 課題ランダム割り当て")
+st.title("社会科 課題割り当てツール")
 
-# 科目の絞り込み選択
+st.markdown("### 抽出条件の設定")
+# 科目の絞り込み
 target_subject = st.radio(
-    "割り当てる科目を選択してください",
+    "科目を選択:",
     ("すべての科目", "歴史的分野", "地理的分野", "公民的分野"),
     horizontal=True
 )
 
-# 選択された科目に基づいてリストをフィルタリング
-if target_subject == "すべての科目":
-    filtered_topics = [t["text"] for t in all_topics]
-else:
-    filtered_topics = [t["text"] for t in all_topics if t["subject"] == target_subject]
+# 単元始めの絞り込み
+only_intro = st.checkbox("単元始め（「導入の活動」や「初めに」など）のみを対象にする")
 
-# 入力フォーム
-with st.form("register_form", clear_on_submit=True):
-    name = st.text_input("名前を入力してください (例: 山田太郎)")
-    submitted = st.form_submit_button("ランダムに割り当てる")
+# 選択された条件に基づいてリストをフィルタリング
+filtered_topics = []
+for t in all_topics:
+    # 科目フィルター
+    if target_subject != "すべての科目" and t["subject"] != target_subject:
+        continue
+    # 単元始めフィルター
+    if only_intro and not any(kw in t["text"] for kw in ["導入の活動", "初めに"]):
+        continue
+    
+    filtered_topics.append(t["text"])
 
-    if submitted and name:
-        if filtered_topics:
-            # 絞り込まれたリストからランダムに選択
-            assigned_topic = random.choice(filtered_topics)
-            
-            # データをリストの先頭に追加（新しいものが上にくるように）
-            st.session_state['registered_data'].insert(0, {
-                "名前": name,
-                "割り当てられたテーマ": assigned_topic
-            })
-        else:
-            st.error("選択された科目のデータが見つかりません。")
+st.divider()
 
-# 結果の表示
+# タブで「ランダム」と「個別（手動）」を分ける
+tab1, tab2 = st.tabs(["🎲 ランダム割り当て", "✍️ 個別（手動）割り当て"])
+
+# ---- ランダム割り当てタブ ----
+with tab1:
+    with st.form("random_form", clear_on_submit=True):
+        st.write("設定した条件の中からランダムに課題を割り当てます。")
+        name_random = st.text_input("名前を入力してください (例: 山田太郎)", key="random_name")
+        submit_random = st.form_submit_button("ランダムに割り当てる")
+
+        if submit_random and name_random:
+            if filtered_topics:
+                assigned_topic = random.choice(filtered_topics)
+                st.session_state['registered_data'].insert(0, {
+                    "名前": name_random,
+                    "割り当てられたテーマ": assigned_topic,
+                    "割り当て方法": "ランダム"
+                })
+                st.rerun() # 画面を即時更新
+            else:
+                st.error("条件に合う課題が見つかりません。抽出条件を変更してください。")
+
+# ---- 個別（手動）割り当てタブ ----
+with tab2:
+    with st.form("manual_form", clear_on_submit=True):
+        st.write("設定した条件の一覧から、特定の課題を選んで割り当てます。")
+        name_manual = st.text_input("名前を入力してください (例: 佐藤花子)", key="manual_name")
+        
+        # フィルタリングされたリストをセレクトボックスに表示
+        selected_topic = st.selectbox(
+            "割り当てる課題を選択してください:", 
+            filtered_topics if filtered_topics else ["条件に合う課題がありません"]
+        )
+        submit_manual = st.form_submit_button("個別に割り当てる")
+
+        if submit_manual and name_manual:
+            if filtered_topics:
+                st.session_state['registered_data'].insert(0, {
+                    "名前": name_manual,
+                    "割り当てられたテーマ": selected_topic,
+                    "割り当て方法": "手動選択"
+                })
+                st.rerun() # 画面を即時更新
+            else:
+                st.error("課題が選択されていません。")
+
+# ==========================================
+# 4. 登録一覧の表示
+# ==========================================
 st.header(f"登録一覧 ({len(st.session_state['registered_data'])}件)")
 
 if st.session_state['registered_data']:
     st.table(st.session_state['registered_data'])
+    
+    # リストをリセットするボタン
+    if st.button("すべての登録データを消去する"):
+        st.session_state['registered_data'] = []
+        st.rerun()
 else:
     st.write("まだ誰も登録されていません。")

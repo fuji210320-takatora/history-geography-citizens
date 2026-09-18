@@ -1,7 +1,5 @@
-from flask import Flask, render_template_string, request, redirect, url_for
+import streamlit as st
 import random
-
-app = Flask(__name__)
 
 # 指定された節題のリスト
 topics = [
@@ -26,74 +24,30 @@ topics = [
     "7章 p260、冷戦後の国際社会"
 ]
 
-# 登録されたデータを保存するリスト（※アプリ終了時にリセットされます）
-registered_data = []
+# 登録データを保持するための設定（画面が更新されてもデータが消えないようにする）
+if 'registered_data' not in st.session_state:
+    st.session_state['registered_data'] = []
 
-# Webページの見た目（HTML）を定義
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>課題ランダム割り当てサイト</title>
-    <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
-        h1 { color: #333; }
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
-        th { background-color: #f8f9fa; }
-        .form-container { margin-bottom: 30px; padding: 20px; background-color: #e9ecef; border-radius: 8px; }
-        input[type="text"] { padding: 8px; font-size: 16px; width: 200px; }
-        button { padding: 8px 16px; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
-        button:hover { background-color: #0056b3; }
-    </style>
-</head>
-<body>
-    <h1>歴史の課題 ランダム割り当て</h1>
-    
-    <div class="form-container">
-        <form action="/add" method="post">
-            <label for="name">名前を入力してください:</label>
-            <input type="text" id="name" name="name" required placeholder="例: 山田太郎">
-            <button type="submit">登録</button>
-        </form>
-    </div>
+st.title("歴史の課題 ランダム割り当て")
 
-    <h2>登録された割り当て一覧</h2>
-    <table>
-        <tr>
-            <th>名前</th>
-            <th>割り当てられたテーマ</th>
-        </tr>
-        {% for item in data %}
-        <tr>
-            <td>{{ item.name }}</td>
-            <td>{{ item.topic }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</body>
-</html>
-"""
+# 入力フォーム（登録ボタンを押すと入力欄がクリアされる設定）
+with st.form("register_form", clear_on_submit=True):
+    name = st.text_input("名前を入力してください (例: 山田太郎)")
+    submitted = st.form_submit_button("登録")
 
-@app.route('/')
-def index():
-    # トップページにアクセスした際、HTMLと登録データを表示
-    return render_template_string(HTML_TEMPLATE, data=registered_data)
-
-@app.route('/add', methods=['POST'])
-def add():
-    # フォームから送信された名前を取得
-    name = request.form.get('name')
-    if name:
-        # 節題リストからランダムに1つを選択
+    # 登録ボタンが押され、かつ名前が入力されている場合の処理
+    if submitted and name:
         assigned_topic = random.choice(topics)
-        # 取得した名前と選ばれたテーマをリストに保存
-        registered_data.append({'name': name, 'topic': assigned_topic})
-    
-    # 処理が終わったらトップページに戻る
-    return redirect(url_for('index'))
+        # データをリストに追加
+        st.session_state['registered_data'].append({
+            "名前": name,
+            "割り当てられたテーマ": assigned_topic
+        })
 
-if __name__ == '__main__':
-    # サーバーを起動
-    app.run(debug=True)
+st.header("登録された割り当て一覧")
+
+# データがあれば表として表示
+if st.session_state['registered_data']:
+    st.table(st.session_state['registered_data'])
+else:
+    st.write("まだ誰も登録されていません。")

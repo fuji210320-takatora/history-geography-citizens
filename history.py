@@ -5,20 +5,12 @@ import re
 # ==========================================
 # 0. 事前メンバーリストの設定
 # ==========================================
-# ここに割り当て対象となるメンバーの名前をあらかじめ書いておきます。
-# 【書き方】
-# "名前", のように、ダブルクォーテーション（"）で囲み、末尾にカンマ（,）をつけます。
 MEMBER_LIST = [
-    "藤井 敬久",
-    "大山 岳久",
-    "尾崎 蒼太",
-    "生永 匠",
-    "姫野 翔",
-    "？？ ？？",
-    "？？ ？？",
-    "？？ ？？",
-    "？？ ？？",
-    "？？ ？？",
+    "山田 太郎",
+    "佐藤 花子",
+    "鈴木 一郎",
+    "田中 次郎",
+    "高橋 三郎",
     # ↓ この下に同じ形式で追加していってください
     
 ]
@@ -538,7 +530,7 @@ RAW_DATA = """
 * 3 地球環境問題 (p.198~199)
 * 4 気候変動と資源・エネルギー問題 (p.200~201)
 * 【もっと知りたい!】これからの日本のエネルギーを考える (p.202~203)
-* 5 平平和な世界に向けて (p.204~205)
+* 5 平和な世界に向けて (p.204~205)
 
 * **3節 これからの地球社会と日本**
 * 1 世界と協力する日本 (p.206~207)
@@ -636,19 +628,16 @@ with tab1:
     with st.form("random_form", clear_on_submit=True):
         st.write("設定した条件の中から、選択したメンバー全員に一気にランダムで課題を割り当てます。")
         
-        # マルチセレクトでメンバーを複数選択（チェックボックスのように使えます）
         selected_members_rand = st.multiselect(
             "割り当てるメンバーを選択してください:", 
             options=MEMBER_LIST
         )
         
-        # リストにない人を臨時で追加したい場合の枠
         other_members_rand = st.text_input("リストにない人を追加する場合 (カンマ区切りで複数可)")
         
         submit_random = st.form_submit_button("一気にランダム割り当て")
 
         if submit_random:
-            # 選択された人と追加された人を合体させる
             final_members = selected_members_rand.copy()
             if other_members_rand:
                 final_members.extend([m.strip() for m in other_members_rand.split(",") if m.strip()])
@@ -658,13 +647,14 @@ with tab1:
             elif not filtered_topics:
                 st.error("条件に合う課題が見つかりません。抽出条件を変更してください。")
             else:
-                # 選択されたメンバー全員に対して順番にランダム割り当て
                 for member in final_members:
                     assigned_topic = random.choice(filtered_topics)
+                    # 初期値として 曜日: "-" を持たせる
                     st.session_state['registered_data'].insert(0, {
                         "名前": member,
                         "割り当てられたテーマ": assigned_topic,
-                        "割り当て方法": "ランダム"
+                        "割り当て方法": "ランダム",
+                        "曜日": "-"
                     })
                 st.rerun() 
 
@@ -695,22 +685,37 @@ with tab2:
             elif not filtered_topics:
                 st.error("課題が選択されていません。")
             else:
-                # 選択されたメンバー全員に同じ課題を割り当て
                 for member in final_members:
+                    # 初期値として 曜日: "-" を持たせる
                     st.session_state['registered_data'].insert(0, {
                         "名前": member,
                         "割り当てられたテーマ": selected_topic,
-                        "割り当て方法": "手動選択"
+                        "割り当て方法": "手動選択",
+                        "曜日": "-"
                     })
                 st.rerun() 
 
 # ==========================================
-# 4. 登録一覧の表示
+# 4. 登録一覧の表示 (編集可能なテーブル)
 # ==========================================
 st.header(f"登録一覧 ({len(st.session_state['registered_data'])}件)")
 
 if st.session_state['registered_data']:
-    st.table(st.session_state['registered_data'])
+    # st.table ではなく st.data_editor を使って表を表示＆編集可能にする
+    st.session_state['registered_data'] = st.data_editor(
+        st.session_state['registered_data'],
+        column_config={
+            "曜日": st.column_config.SelectboxColumn(
+                "曜日",
+                help="発表や提出の曜日を選択してください",
+                width="small",
+                options=["-", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"],
+                required=True
+            )
+        },
+        hide_index=True,  # 左端の連番（0, 1, 2...）を隠す
+        use_container_width=True # 画面幅に合わせて表示
+    )
     
     # リストをリセットするボタン
     if st.button("すべての登録データを消去する"):

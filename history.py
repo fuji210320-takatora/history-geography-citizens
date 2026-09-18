@@ -18,13 +18,17 @@ st.markdown("""
     p, span, div, label {
         font-size: 13px !important;
     }
-    /* 行間を詰める */
+    /* 行間を限界まで詰める */
     [data-testid="stVerticalBlock"] {
         gap: 0rem !important;
     }
-    /* 曜日のセレクトボックスを極限まで小さく */
+    /* 曜日のセレクトボックスの幅・高さをさらに極小化 */
+    div[data-testid="stSelectbox"] {
+        width: 60px !important; /* 横幅を小さく */
+    }
     [data-baseweb="select"] > div {
-        min-height: 28px !important;
+        min-height: 22px !important;
+        font-size: 12px !important;
         padding-top: 0px !important;
         padding-bottom: 0px !important;
     }
@@ -647,7 +651,6 @@ def parse_topics(raw_text):
                 "full_title": full_title,
                 "page_fmt": page_fmt,
                 "is_first": is_first,
-                # セレクトボックスで表示するためのテキスト
                 "display_text": f"【{current_subject}】 {full_title} ({page_fmt})"
             })
             
@@ -721,7 +724,6 @@ with tab2:
         selected_members_man = st.multiselect("メンバーを選択:", options=MEMBER_LIST)
         other_members_man = st.text_input("追加メンバー(カンマ区切り)", key="man_other")
         
-        # 辞書の中の「display_text」を表示用にする
         selected_topic = st.selectbox(
             "課題を選択:", 
             filtered_topics if filtered_topics else [{"display_text": "課題がありません"}],
@@ -749,35 +751,34 @@ with tab2:
 
 
 # ==========================================
-# 5. 登録一覧の表示 (カスタムレイアウト)
+# 5. 登録一覧の表示 (超コンパクトレイアウト)
 # ==========================================
 if st.session_state['registered_data']:
     st.markdown(f"### 登録一覧 ({len(st.session_state['registered_data'])}件)")
-    st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
     
     day_options = ["-", "月", "火", "水", "木", "金", "土", "日"]
     
     for i, data in enumerate(st.session_state['registered_data']):
         topic = data["topic_data"]
         
-        # 1行目: 〇〇(名前) 【△△的分野】p✦✦〜p☆☆
-        st.markdown(f"<div style='font-weight:bold; font-size:14px; margin-bottom:4px;'>"
+        # 1行目: 〇〇(名前) 【△△的分野】p✦✦〜p☆☆ (下の行との隙間を小さくするため margin-bottom を 0 に)
+        st.markdown(f"<div style='font-weight:bold; font-size:14px; margin-top:14px; margin-bottom:0px;'>"
                     f"{data['名前']} 【{topic['subject']}】{topic['page_fmt']}</div>", 
                     unsafe_allow_html=True)
         
-        # 2行目: 章名、節名、題など ［セレクトボックス］
-        col1, col2 = st.columns([8.5, 1.5])
-        col1.markdown(f"<div style='color:#444; padding-top:4px;'>{topic['full_title']}</div>", unsafe_allow_html=True)
-        
-        current_day = data.get("曜日", "-")
-        day_idx = day_options.index(current_day) if current_day in day_options else 0
-        new_day = col2.selectbox("曜日", day_options, index=day_idx, key=f"day_{i}", label_visibility="collapsed")
-        
-        if new_day != current_day:
-            st.session_state['registered_data'][i]["曜日"] = new_day
+        # 2行目: 章名、節名、題など と [セレクトボックス] を同じ行に並べる
+        col1, col2 = st.columns([9.2, 0.8])
+        with col1:
+            st.markdown(f"<div style='color:#444; margin-top:2px;'>{topic['full_title']}</div>", unsafe_allow_html=True)
+        with col2:
+            current_day = data.get("曜日", "-")
+            day_idx = day_options.index(current_day) if current_day in day_options else 0
+            new_day = st.selectbox("曜日", day_options, index=day_idx, key=f"day_{i}", label_visibility="collapsed")
+            
+            if new_day != current_day:
+                st.session_state['registered_data'][i]["曜日"] = new_day
 
-        st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
-
+    st.divider()
     if st.button("すべての登録データを消去する"):
         st.session_state['registered_data'] = []
         st.rerun()

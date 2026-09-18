@@ -3,7 +3,53 @@ import random
 import re
 
 # ==========================================
-# 0. 事前メンバーリストの設定
+# 0. ページ設定（※必ず一番最初に書く必要があります）
+# ==========================================
+# 画面を横広く(wide)使い、余白を減らす
+st.set_page_config(layout="wide", page_title="社会科 課題一括割り当て")
+
+# 画面全体の文字を小さくし、隙間を詰めるCSS（デザイン設定）
+st.markdown("""
+    <style>
+    /* 全体の上下の余白を最小化 */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+    /* 全体の文字サイズと行間を小さく */
+    p, span, div, label {
+        font-size: 13px !important;
+        line-height: 1.2 !important;
+    }
+    /* 各行（カラム）の隙間を詰める */
+    [data-testid="stVerticalBlock"] {
+        gap: 0.2rem !important;
+    }
+    /* 曜日のセレクトボックス(プルダウン)の高さを極限まで小さく */
+    [data-baseweb="select"] > div {
+        min-height: 24px !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
+    }
+    /* 見出しサイズ調整 */
+    h1 { font-size: 20px !important; margin-bottom: 0 !important; }
+    h2 { font-size: 18px !important; margin-bottom: 0 !important; }
+    h3 { font-size: 16px !important; margin-bottom: 0 !important; }
+    /* 区切り線を細くして上下の隙間を減らす */
+    hr {
+        margin: 0.5em 0 !important;
+        border-color: #ddd !important;
+    }
+    /* フォームの余白縮小 */
+    [data-testid="stForm"] {
+        padding: 10px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+
+# ==========================================
+# 1. 事前メンバーリストの設定
 # ==========================================
 MEMBER_LIST = [
     "藤井 敬久",
@@ -16,7 +62,7 @@ MEMBER_LIST = [
 ]
 
 # ==========================================
-# 1. データの準備
+# 2. データの準備
 # ==========================================
 RAW_DATA = """
 ## 歴史的分野
@@ -545,7 +591,7 @@ RAW_DATA = """
 """
 
 # ==========================================
-# 2. テキストデータを解析してリスト化する関数
+# 3. テキストデータを解析してリスト化する関数
 # ==========================================
 @st.cache_data
 def parse_topics(raw_text):
@@ -590,7 +636,7 @@ def parse_topics(raw_text):
 all_topics = parse_topics(RAW_DATA)
 
 # ==========================================
-# 3. StreamlitアプリのUI構築
+# 4. StreamlitアプリのUI構築
 # ==========================================
 
 if 'registered_data' not in st.session_state:
@@ -601,15 +647,18 @@ st.title("社会科 課題一括割り当てツール")
 st.markdown("### 抽出条件の設定")
 target_subject = st.radio(
     "科目を選択:",
-    ("すべての科目", "歴史的分野", "地理的分野", "公民的分野"),
+    ("すべての科目", "歴史", "地理", "公民"),  # 名前を少し短縮
     horizontal=True
 )
+# "歴史"が選ばれたら"歴史的分野"に置き換える処理
+subject_map = {"歴史": "歴史的分野", "地理": "地理的分野", "公民": "公民的分野", "すべての科目": "すべての科目"}
+target_subject_full = subject_map[target_subject]
 
-only_first = st.checkbox("単元の初め（各節や章の最初の項目）のみを対象にする")
+only_first = st.checkbox("単元の初め（各節や章の最初の項目）のみ対象")
 
 filtered_topics = []
 for t in all_topics:
-    if target_subject != "すべての科目" and t["subject"] != target_subject:
+    if target_subject_full != "すべての科目" and t["subject"] != target_subject_full:
         continue
     if only_first and not t["is_first"]:
         continue
@@ -617,14 +666,13 @@ for t in all_topics:
 
 st.divider()
 
-tab1, tab2 = st.tabs(["🎲 ランダム割り当て", "✍️ 個別（手動）割り当て"])
+tab1, tab2 = st.tabs(["🎲 ランダム", "✍️ 個別(手動)"])
 
 # ---- ランダム割り当てタブ ----
 with tab1:
     with st.form("random_form", clear_on_submit=True):
-        st.write("設定した条件の中から、選択したメンバー全員に一気にランダムで課題を割り当てます。")
-        selected_members_rand = st.multiselect("割り当てるメンバーを選択してください:", options=MEMBER_LIST)
-        other_members_rand = st.text_input("リストにない人を追加する場合 (カンマ区切りで複数可)")
+        selected_members_rand = st.multiselect("メンバーを選択:", options=MEMBER_LIST)
+        other_members_rand = st.text_input("追加メンバー(カンマ区切り)")
         submit_random = st.form_submit_button("一気にランダム割り当て")
 
         if submit_random:
@@ -633,9 +681,9 @@ with tab1:
                 final_members.extend([m.strip() for m in other_members_rand.split(",") if m.strip()])
                 
             if not final_members:
-                st.error("メンバーが選択（または入力）されていません。")
+                st.error("メンバーが選択されていません。")
             elif not filtered_topics:
-                st.error("条件に合う課題が見つかりません。抽出条件を変更してください。")
+                st.error("条件に合う課題が見つかりません。")
             else:
                 for member in final_members:
                     assigned_topic = random.choice(filtered_topics)
@@ -650,10 +698,9 @@ with tab1:
 # ---- 個別（手動）割り当てタブ ----
 with tab2:
     with st.form("manual_form", clear_on_submit=True):
-        st.write("設定した条件の一覧から特定の課題を選び、選択したメンバー全員に同じ課題を一気に割り当てます。")
-        selected_members_man = st.multiselect("割り当てるメンバーを選択してください:", options=MEMBER_LIST)
-        other_members_man = st.text_input("リストにない人を追加する場合 (カンマ区切りで複数可)", key="man_other")
-        selected_topic = st.selectbox("割り当てる課題を選択:", filtered_topics if filtered_topics else ["条件に合う課題がありません"])
+        selected_members_man = st.multiselect("メンバーを選択:", options=MEMBER_LIST)
+        other_members_man = st.text_input("追加メンバー(カンマ区切り)", key="man_other")
+        selected_topic = st.selectbox("課題を選択:", filtered_topics if filtered_topics else ["課題がありません"])
         submit_manual = st.form_submit_button("一気に個別に割り当て")
 
         if submit_manual:
@@ -662,7 +709,7 @@ with tab2:
                 final_members.extend([m.strip() for m in other_members_man.split(",") if m.strip()])
                 
             if not final_members:
-                st.error("メンバーが選択（または入力）されていません。")
+                st.error("メンバーが選択されていません。")
             elif not filtered_topics:
                 st.error("課題が選択されていません。")
             else:
@@ -676,36 +723,33 @@ with tab2:
                 st.rerun() 
 
 # ==========================================
-# 4. 登録一覧の表示 (折り返し＋ワンクリック選択)
+# 5. 登録一覧の表示 (超コンパクトレイアウト)
 # ==========================================
 st.header(f"登録一覧 ({len(st.session_state['registered_data'])}件)")
 
 if st.session_state['registered_data']:
-    # 見出し行を作成
-    col_h1, col_h2, col_h3, col_h4 = st.columns([2, 5, 2, 2])
+    # 見出し行 (幅の比率: 名前 1.5, テーマ 6.5, 方法 1.5, 曜日 1)
+    col_h1, col_h2, col_h3, col_h4 = st.columns([1.5, 6.5, 1.5, 1])
     col_h1.write("**名前**")
     col_h2.write("**割り当てられたテーマ**")
-    col_h3.write("**割り当て方法**")
+    col_h3.write("**方法**")
     col_h4.write("**曜日**")
     st.divider()
 
-    # 各行のデータを表示
     day_options = ["-", "月", "火", "水", "木", "金", "土", "日"]
     
     for i, data in enumerate(st.session_state['registered_data']):
-        col1, col2, col3, col4 = st.columns([2, 5, 2, 2])
+        # 幅の比率は見出しと同じにする
+        col1, col2, col3, col4 = st.columns([1.5, 6.5, 1.5, 1])
         
         col1.write(data["名前"])
-        # テーマは文字数が多いのでそのまま表示することで自然に折り返されます
         col2.write(data["割り当てられたテーマ"])
         col3.write(data["割り当て方法"])
         
-        # 曜日選択（1クリックで開く標準のセレクトボックス）
         current_day = data.get("曜日", "-")
         day_idx = day_options.index(current_day) if current_day in day_options else 0
         new_day = col4.selectbox("曜日", day_options, index=day_idx, key=f"day_{i}", label_visibility="collapsed")
         
-        # 変更があれば保存
         if new_day != current_day:
             st.session_state['registered_data'][i]["曜日"] = new_day
 
